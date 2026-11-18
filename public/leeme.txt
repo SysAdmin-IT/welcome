@@ -1,1 +1,26 @@
-Archivos estaticos
+Subí acá los PDFs con estos nombres exactos. Apenas estén en GitHub, el botón deja de usar Drive y sirve el archivo desde el Worker.
+
+PÁGINA PRINCIPAL (/)
+  bienvenida.pdf                 <- ¡Bienvenido/a! (Drive)
+  legajo-digital.pdf             <- Mi legajo digital (PDF de Linktree)
+  beneficios.pdf                 <- Nuestros beneficios (Drive)
+  como-nos-comunicamos.pdf       <- Cómo nos comunicamos (Drive)
+  manual-del-colaborador.pdf     <- Manual del Colaborador (PDF de Linktree)
+  reglamento-interno.pdf         <- Reglamento Interno (PDF de Linktree)
+
+UNIFORMES (/uniformes)
+  instructivo-uniforme-administrativo.pdf
+  instructivo-ambo.pdf
+  instructivo-guardapolvo.pdf
+
+INFORMACIÓN ÚTIL (/informacion-util)
+  registro-ingreso-egreso.pdf    <- (Drive)
+  cuenta-bancaria.pdf            <- (Drive)
+  dudas-liquidacion.pdf          <- (Drive)
+  obra-social.pdf                <- (Drive)
+  maquinas-de-cafe.pdf           <- (Drive)
+  cloudpayroll.pdf               <- (PDF de Linktree)
+  presentismo-nubi.pdf           <- (Drive)
+
+FOTO DE PERFIL
+  public/avatar.jpeg
