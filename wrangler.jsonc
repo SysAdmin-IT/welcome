@@ -13,7 +13,7 @@
   },
   "kv_namespaces": [
     // Creá el KV en Cloudflare (Storage & Databases > KV) y pegá su ID acá
-    { "binding": "DATA", "id": "PEGAR-ID-DEL-KV-AQUI" }
+    { "binding": "DATA", "id": "5c3b0a740c5540dfbee2c1ac38da38b9" }
   ],
   "vars": {
     "CORPORATE_DOMAIN": "diagnosticomaipu.com.ar",
