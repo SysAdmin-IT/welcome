@@ -1,0 +1,17 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "welcome-invitados",
+  "main": "src/index.js",
+  "compatibility_date": "2026-11-01",
+  "workers_dev": true,
+  "preview_urls": false,
+  "observability": { "enabled": true },
+  "vars": {
+    // Dirección del sitio principal (sin barra final)
+    "MAIN_URL": "https://welcome.sistemas-97d.workers.dev",
+    // Se completa después de activar Cloudflare Access (ver README)
+    "TEAM_DOMAIN": "https://TU-EQUIPO.cloudflareaccess.com",
+    "POLICY_AUD": "PEGAR-AUD-AQUI"
+  }
+  // Secreto (no va en este archivo):  GUEST_LINK_SECRET  -> el mismo valor que en el Worker principal
+}

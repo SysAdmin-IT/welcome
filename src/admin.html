@@ -1,0 +1,391 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Administración</title>
+<style>
+  :root{--bg:#f3f6f9;--card:#fff;--text:#1d2b3a;--muted:#5b6b7c;--accent:#1f6feb;--line:#e3e8ee;--danger:#c62828;--ok:#1b7f3b}
+  *{box-sizing:border-box}
+  body{margin:0;font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;background:var(--bg);color:var(--text);font-size:15px}
+  header{background:#fff;border-bottom:1px solid var(--line);position:sticky;top:0;z-index:5}
+  .bar{max-width:1000px;margin:0 auto;padding:12px 20px;display:flex;align-items:center;gap:16px;flex-wrap:wrap}
+  .bar h1{font-size:1.05rem;margin:0;flex:1}
+  .bar a{color:var(--muted);text-decoration:none;font-size:.9rem}
+  nav{max-width:1000px;margin:0 auto;padding:0 20px;display:flex;gap:4px;overflow-x:auto}
+  nav button{background:none;border:0;border-bottom:3px solid transparent;padding:10px 14px;font:inherit;color:var(--muted);cursor:pointer;white-space:nowrap}
+  nav button.on{color:var(--accent);border-color:var(--accent);font-weight:600}
+  main{max-width:1000px;margin:0 auto;padding:20px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px;margin-bottom:16px}
+  .card h2{font-size:1rem;margin:0 0 12px}
+  .row{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:8px}
+  .grow{flex:1;min-width:160px}
+  input,select{font:inherit;padding:8px 10px;border:1px solid #cfd6de;border-radius:8px;background:#fff;min-width:0}
+  input:focus,select:focus{outline:2px solid var(--accent);outline-offset:-1px}
+  button.b{font:inherit;padding:8px 12px;border-radius:8px;border:1px solid #cfd6de;background:#fff;cursor:pointer}
+  button.b:hover{border-color:var(--accent)}
+  button.p{background:var(--accent);color:#fff;border-color:var(--accent)}
+  button.d{color:var(--danger)}
+  button.i{padding:6px 9px}
+  .muted{color:var(--muted);font-size:.85rem}
+  .section{border:1px dashed #cfd6de;border-radius:10px;padding:12px;margin-bottom:12px;background:#fafbfc}
+  .link{display:grid;grid-template-columns:1.4fr 110px 1.6fr auto;gap:6px;align-items:center;margin-bottom:6px}
+  @media (max-width:720px){.link{grid-template-columns:1fr 1fr}.link .acts{grid-column:span 2}}
+  .acts{display:flex;gap:4px}
+  table{width:100%;border-collapse:collapse}
+  td,th{text-align:left;padding:8px 6px;border-bottom:1px solid var(--line);font-size:.9rem;vertical-align:middle}
+  th{color:var(--muted);font-weight:600}
+  .pill{display:inline-block;font-size:.75rem;padding:2px 8px;border-radius:99px;background:#eef3fb;color:var(--accent)}
+  .toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:#1d2b3a;color:#fff;padding:10px 16px;border-radius:10px;max-width:90vw;z-index:20;box-shadow:0 6px 20px rgba(0,0,0,.2)}
+  .toast.err{background:var(--danger)}
+  .savebar{position:sticky;bottom:0;background:#fff;border-top:1px solid var(--line);padding:12px 20px;display:flex;gap:12px;align-items:center;justify-content:flex-end;margin:0 -20px -20px}
+  .dirty{color:#b26a00;font-size:.9rem}
+  .warn{background:#fff7e6;border:1px solid #ffd591;border-radius:10px;padding:10px 12px;margin-bottom:12px;font-size:.9rem}
+</style>
+</head>
+<body>
+<header>
+  <div class="bar"><h1>⚙️ Administración</h1><span class="muted" id="me"></span><a href="/">Ver sitio</a><a href="/logout">Salir</a></div>
+  <nav id="tabs"></nav>
+</header>
+<main id="app"><p class="muted">Cargando…</p></main>
+
+<script>
+"use strict";
+var S = null;            // estado del servidor
+var draft = null;        // contenido en edición
+var dirty = false;
+var tab = "content";
+var currentPage = "/";
+
+// ---------- utilidades ----------
+function h(tag, attrs) {
+  var el = document.createElement(tag);
+  attrs = attrs || {};
+  for (var k in attrs) {
+    var v = attrs[k];
+    if (v === undefined || v === null || v === false) continue;
+    if (k === "on") { for (var ev in v) el.addEventListener(ev, v[ev]); }
+    else if (k === "text") el.textContent = v;
+    else if (k === "value") el.value = v;
+    else el.setAttribute(k, v === true ? "" : v);
+  }
+  for (var i = 2; i < arguments.length; i++) {
+    var c = arguments[i];
+    if (c === null || c === undefined || c === false) continue;
+    if (Array.isArray(c)) c.forEach(function (x) { if (x) el.appendChild(typeof x === "string" ? document.createTextNode(x) : x); });
+    else el.appendChild(typeof c === "string" ? document.createTextNode(c) : c);
+  }
+  return el;
+}
+function toast(msg, isErr) {
+  var t = h("div", { class: "toast" + (isErr ? " err" : ""), text: msg });
+  document.body.appendChild(t);
+  setTimeout(function () { t.remove(); }, isErr ? 6000 : 3000);
+}
+function api(method, path, body, isForm) {
+  var opts = { method: method, headers: {} };
+  if (body !== undefined) {
+    if (isForm) opts.body = body;
+    else { opts.body = JSON.stringify(body); opts.headers["Content-Type"] = "application/json"; }
+  }
+  return fetch("/admin/api" + path, opts).then(function (r) {
+    return r.json().catch(function () { return {}; }).then(function (d) {
+      if (!r.ok) throw new Error(d.error || ("Error " + r.status));
+      return d;
+    });
+  });
+}
+function fmtDate(s) { try { return new Date(s).toLocaleString("es-AR"); } catch (e) { return s || ""; } }
+function fmtSize(n) { return n > 1048576 ? (n / 1048576).toFixed(1) + " MB" : Math.max(1, Math.round(n / 1024)) + " KB"; }
+function markDirty() { dirty = true; var d = document.getElementById("dirty"); if (d) d.textContent = "Hay cambios sin guardar"; }
+function clone(o) { return JSON.parse(JSON.stringify(o)); }
+
+window.addEventListener("beforeunload", function (e) { if (dirty) { e.preventDefault(); e.returnValue = ""; } });
+
+// ---------- carga ----------
+function load() {
+  return api("GET", "/state").then(function (d) {
+    S = d;
+    if (!dirty) draft = clone(d.content);
+    if (!draft.pages[currentPage]) currentPage = "/";
+    document.getElementById("me").textContent = d.me;
+    render();
+  }).catch(function (e) {
+    document.getElementById("app").textContent = e.message;
+  });
+}
+
+function renderTabs() {
+  var tabs = [["content", "📄 Contenido"], ["files", "📎 Archivos"], ["guests", "✉️ Accesos externos"], ["admins", "🛡️ Administradores"]];
+  var nav = document.getElementById("tabs");
+  nav.textContent = "";
+  tabs.forEach(function (t) {
+    nav.appendChild(h("button", { class: tab === t[0] ? "on" : "", text: t[1], on: { click: function () { tab = t[0]; render(); } } }));
+  });
+}
+
+function render() {
+  renderTabs();
+  var app = document.getElementById("app");
+  app.textContent = "";
+  if (tab === "content") app.appendChild(viewContent());
+  if (tab === "files") app.appendChild(viewFiles());
+  if (tab === "guests") app.appendChild(viewGuests());
+  if (tab === "admins") app.appendChild(viewAdmins());
+}
+
+// ---------- CONTENIDO ----------
+function pageOptions(selected) {
+  return Object.keys(draft.pages).map(function (slug) {
+    return h("option", { value: slug, selected: slug === selected, text: (draft.pages[slug].title || slug) + "  (" + slug + ")" });
+  });
+}
+function fileOptions(selected, emptyLabel) {
+  var opts = [h("option", { value: "", text: emptyLabel || "— Elegí un archivo —" })];
+  S.files.forEach(function (f) { opts.push(h("option", { value: f.id, selected: f.id === selected, text: f.name })); });
+  return opts;
+}
+
+function viewContent() {
+  var wrap = h("div");
+  var page = draft.pages[currentPage];
+
+  // Selector de página
+  var sel = h("select", { class: "grow", on: { change: function (e) { currentPage = e.target.value; render(); } } }, pageOptions(currentPage));
+  wrap.appendChild(h("div", { class: "card" },
+    h("h2", { text: "Páginas del sitio" }),
+    h("div", { class: "row" }, sel,
+      h("button", { class: "b", text: "＋ Nueva página", on: { click: addPage } }),
+      currentPage !== "/" ? h("button", { class: "b d", text: "Eliminar esta página", on: { click: delPage } }) : null,
+      h("a", { href: currentPage, target: "_blank", class: "muted", text: "Abrir ↗" })
+    )
+  ));
+
+  // Datos de la página
+  wrap.appendChild(h("div", { class: "card" },
+    h("h2", { text: "Datos de la página " + currentPage }),
+    h("div", { class: "row" },
+      h("label", { class: "grow" }, h("div", { class: "muted", text: "Título (pestaña del navegador)" }),
+        h("input", { style: "width:100%", value: page.title || "", on: { input: function (e) { page.title = e.target.value; markDirty(); } } })),
+      h("label", { class: "grow" }, h("div", { class: "muted", text: "Encabezado (debajo de la foto)" }),
+        h("input", { style: "width:100%", value: page.heading || "", on: { input: function (e) { page.heading = e.target.value; markDirty(); } } }))
+    )
+  ));
+
+  // Secciones y botones
+  var secCard = h("div", { class: "card" }, h("h2", { text: "Secciones y botones" }));
+  page.sections.forEach(function (sec, si) {
+    var box = h("div", { class: "section" });
+    box.appendChild(h("div", { class: "row" },
+      h("input", { class: "grow", placeholder: "Título de la sección (opcional)", value: sec.title || "", on: { input: function (e) { sec.title = e.target.value; markDirty(); } } }),
+      h("button", { class: "b i", title: "Subir sección", text: "↑", disabled: si === 0, on: { click: function () { move(page.sections, si, -1); } } }),
+      h("button", { class: "b i", title: "Bajar sección", text: "↓", disabled: si === page.sections.length - 1, on: { click: function () { move(page.sections, si, 1); } } }),
+      h("button", { class: "b i d", title: "Eliminar sección", text: "✕", on: { click: function () {
+        if (confirm("¿Eliminar la sección \"" + (sec.title || "sin título") + "\" y sus botones?")) { page.sections.splice(si, 1); markDirty(); render(); }
+      } } })
+    ));
+    sec.links.forEach(function (l, li) { box.appendChild(linkRow(sec, l, li)); });
+    box.appendChild(h("button", { class: "b", text: "＋ Agregar botón", on: { click: function () { sec.links.push({ label: "Nuevo botón", type: "url", value: "" }); markDirty(); render(); } } }));
+    secCard.appendChild(box);
+  });
+  secCard.appendChild(h("button", { class: "b", text: "＋ Agregar sección", on: { click: function () { page.sections.push({ title: "", links: [] }); markDirty(); render(); } } }));
+  wrap.appendChild(secCard);
+
+  // Ajustes generales
+  var st = draft.settings = draft.settings || {};
+  wrap.appendChild(h("div", { class: "card" },
+    h("h2", { text: "Ajustes generales" }),
+    h("div", { class: "row" },
+      h("label", { class: "grow" }, h("div", { class: "muted", text: "Nombre del sitio (pantalla de ingreso)" }),
+        h("input", { style: "width:100%", value: st.siteTitle || "", on: { input: function (e) { st.siteTitle = e.target.value; markDirty(); } } })),
+      h("label", { class: "grow" }, h("div", { class: "muted", text: "Foto de perfil (subila en Archivos)" }),
+        h("select", { style: "width:100%", on: { change: function (e) { st.avatarFileId = e.target.value; markDirty(); } } },
+          fileOptions(st.avatarFileId, st.avatarUrl ? "— Imagen actual de Linktree —" : "— Sin foto —")))
+    ),
+    st.avatarUrl && !st.avatarFileId ? h("div", { class: "warn", text: "La foto todavía se carga desde Linktree. Subí la imagen en la pestaña Archivos y elegila acá para dejar de depender de Linktree." }) : null
+  ));
+
+  wrap.appendChild(h("div", { class: "savebar" },
+    h("span", { id: "dirty", class: "dirty", text: dirty ? "Hay cambios sin guardar" : "" }),
+    h("button", { class: "b", text: "Descartar cambios", on: { click: function () { if (confirm("¿Descartar los cambios?")) { draft = clone(S.content); dirty = false; render(); } } } }),
+    h("button", { class: "b p", text: "💾 Guardar y publicar", on: { click: saveContent } })
+  ));
+  return wrap;
+}
+
+function linkRow(sec, l, li) {
+  var valueField;
+  if (l.type === "page") {
+    valueField = h("select", { on: { change: function (e) { l.value = e.target.value; markDirty(); } } },
+      [h("option", { value: "", text: "— Elegí una página —" })].concat(pageOptions(l.value)));
+  } else if (l.type === "file") {
+    valueField = h("select", { on: { change: function (e) { l.value = e.target.value; markDirty(); } } }, fileOptions(l.value));
+  } else {
+    valueField = h("input", { placeholder: "https://…", value: l.value || "", on: { input: function (e) { l.value = e.target.value.trim(); markDirty(); } } });
+  }
+  return h("div", { class: "link" },
+    h("input", { placeholder: "Texto del botón", value: l.label || "", on: { input: function (e) { l.label = e.target.value; markDirty(); } } }),
+    h("select", { on: { change: function (e) { l.type = e.target.value; l.value = ""; markDirty(); render(); } } },
+      h("option", { value: "url", selected: l.type === "url", text: "Enlace" }),
+      h("option", { value: "file", selected: l.type === "file", text: "Archivo" }),
+      h("option", { value: "page", selected: l.type === "page", text: "Página" })),
+    valueField,
+    h("div", { class: "acts" },
+      h("button", { class: "b i", title: "Subir", text: "↑", disabled: li === 0, on: { click: function () { move(sec.links, li, -1); } } }),
+      h("button", { class: "b i", title: "Bajar", text: "↓", disabled: li === sec.links.length - 1, on: { click: function () { move(sec.links, li, 1); } } }),
+      h("button", { class: "b i d", title: "Eliminar botón", text: "✕", on: { click: function () { if (confirm("¿Eliminar el botón \"" + l.label + "\"?")) { sec.links.splice(li, 1); markDirty(); render(); } } } }))
+  );
+}
+
+function move(arr, i, d) { var j = i + d; if (j < 0 || j >= arr.length) return; var t = arr[i]; arr[i] = arr[j]; arr[j] = t; markDirty(); render(); }
+
+function addPage() {
+  var name = prompt("Nombre de la nueva página (ej. Vacaciones):");
+  if (!name) return;
+  var slug = "/" + name.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+  if (slug === "/") { toast("Nombre inválido", true); return; }
+  if (draft.pages[slug]) { toast("Ya existe una página " + slug, true); return; }
+  draft.pages[slug] = { title: name, heading: name, sections: [{ title: "", links: [] }] };
+  currentPage = slug; markDirty(); render();
+  toast("Página " + slug + " creada. Agregá un botón que apunte a ella y guardá.");
+}
+function delPage() {
+  var refs = [];
+  Object.keys(draft.pages).forEach(function (s) { draft.pages[s].sections.forEach(function (sec) { sec.links.forEach(function (l) { if (l.type === "page" && l.value === currentPage) refs.push(s + " → " + l.label); }); }); });
+  if (refs.length) { toast("Hay botones que apuntan a esta página: " + refs.join(", "), true); return; }
+  if (!confirm("¿Eliminar la página " + currentPage + "?")) return;
+  delete draft.pages[currentPage]; currentPage = "/"; markDirty(); render();
+}
+
+function saveContent() {
+  api("PUT", "/content", draft).then(function () {
+    dirty = false; toast("✅ Cambios publicados"); return load();
+  }).catch(function (e) { toast(e.message, true); });
+}
+
+// ---------- ARCHIVOS ----------
+function viewFiles() {
+  var input = h("input", { type: "file", accept: "application/pdf,image/*", multiple: true });
+  var btn = h("button", { class: "b p", text: "Subir", on: { click: function () {
+    var files = Array.prototype.slice.call(input.files || []);
+    if (!files.length) { toast("Elegí al menos un archivo", true); return; }
+    btn.disabled = true; btn.textContent = "Subiendo…";
+    var chain = Promise.resolve();
+    files.forEach(function (f) {
+      chain = chain.then(function () {
+        var fd = new FormData(); fd.append("file", f);
+        return api("POST", "/files", fd, true).then(function () { toast("Subido: " + f.name); }).catch(function (e) { toast(f.name + ": " + e.message, true); });
+      });
+    });
+    chain.then(function () { btn.disabled = false; btn.textContent = "Subir"; load(); });
+  } } });
+
+  var rows = S.files.map(function (f) {
+    return h("tr", {},
+      h("td", {}, h("a", { href: "/f/" + f.id, target: "_blank", text: f.name })),
+      h("td", { text: fmtSize(f.size || 0) }),
+      h("td", { class: "muted", text: fmtDate(f.uploadedAt) + (f.uploadedBy ? " · " + f.uploadedBy : "") }),
+      h("td", {}, h("button", { class: "b i d", text: "Eliminar", on: { click: function () {
+        if (!confirm("¿Eliminar \"" + f.name + "\"? No se puede deshacer.")) return;
+        api("DELETE", "/files/" + encodeURIComponent(f.id)).then(function () { toast("Eliminado"); load(); }).catch(function (e) { toast(e.message, true); });
+      } } }))
+    );
+  });
+
+  return h("div", {},
+    h("div", { class: "card" },
+      h("h2", { text: "Subir archivos" }),
+      h("p", { class: "muted", text: "PDF o imágenes, hasta " + S.maxFileMB + " MB cada uno. Después, en Contenido, asignalos a un botón con el tipo “Archivo”. Solo los ve quien inició sesión." }),
+      h("div", { class: "row" }, input, btn)
+    ),
+    h("div", { class: "card" },
+      h("h2", { text: "Archivos (" + S.files.length + ")" }),
+      S.files.length ? h("table", {}, h("thead", {}, h("tr", {}, h("th", { text: "Nombre" }), h("th", { text: "Tamaño" }), h("th", { text: "Subido" }), h("th"))), h("tbody", {}, rows))
+                     : h("p", { class: "muted", text: "Todavía no hay archivos." })
+    )
+  );
+}
+
+// ---------- ACCESOS EXTERNOS ----------
+function viewGuests() {
+  var email = h("input", { class: "grow", type: "email", placeholder: "correo@gmail.com" });
+  var note = h("input", { class: "grow", placeholder: "Nota (ej. nombre o motivo) — opcional" });
+  var full = S.guests.length >= S.maxGuests;
+  var add = h("button", { class: "b p", text: "Habilitar", disabled: full, on: { click: function () {
+    api("POST", "/guests", { email: email.value, note: note.value }).then(function (d) {
+      toast("Correo habilitado. " + (d.sync ? d.sync.message : ""), d.sync && !d.sync.ok); load();
+    }).catch(function (e) { toast(e.message, true); });
+  } } });
+
+  var rows = S.guests.map(function (g) {
+    return h("tr", {},
+      h("td", { text: g.email }),
+      h("td", { class: "muted", text: g.note || "" }),
+      h("td", { class: "muted", text: fmtDate(g.addedAt) + " · " + (g.addedBy || "") }),
+      h("td", {}, h("button", { class: "b i d", text: "Dar de baja", on: { click: function () {
+        if (!confirm("¿Quitar el acceso de " + g.email + "?")) return;
+        api("DELETE", "/guests/" + encodeURIComponent(g.email)).then(function (d) {
+          toast("Acceso quitado. " + (d.sync ? d.sync.message : ""), d.sync && !d.sync.ok); load();
+        }).catch(function (e) { toast(e.message, true); });
+      } } }))
+    );
+  });
+
+  return h("div", {},
+    !S.accessConfigured ? h("div", { class: "warn", text: "Cloudflare Access todavía no está configurado en el Worker (CF_API_TOKEN, CF_ACCOUNT_ID, CF_ACCESS_POLICY_ID). Los correos se guardan, pero no se van a poder verificar hasta completar la configuración." }) : null,
+    h("div", { class: "card" },
+      h("h2", { text: "Habilitar un correo externo" }),
+      h("p", { class: "muted", text: "Para personas sin cuenta @" + S.domain + ". Al ingresar, Cloudflare les envía un código por correo para verificar que el correo es suyo. Máximo " + S.maxGuests + "." }),
+      h("div", { class: "row" }, email, note, add),
+      full ? h("div", { class: "warn", text: "Se alcanzó el máximo de " + S.maxGuests + ". Dá de baja algún correo para agregar otro." }) : null
+    ),
+    h("div", { class: "card" },
+      h("div", { class: "row" }, h("h2", { class: "grow", style: "margin:0", text: "Correos habilitados " }), h("span", { class: "pill", text: S.guests.length + " / " + S.maxGuests }),
+        S.accessConfigured ? h("button", { class: "b", text: "↻ Resincronizar con Cloudflare", on: { click: function () {
+          api("POST", "/guests/sync").then(function (d) { toast(d.sync.message, !d.sync.ok); }).catch(function (e) { toast(e.message, true); });
+        } } }) : null),
+      S.guests.length ? h("table", {}, h("thead", {}, h("tr", {}, h("th", { text: "Correo" }), h("th", { text: "Nota" }), h("th", { text: "Alta" }), h("th"))), h("tbody", {}, rows))
+                      : h("p", { class: "muted", text: "No hay correos externos habilitados." })
+    )
+  );
+}
+
+// ---------- ADMINISTRADORES ----------
+function viewAdmins() {
+  var email = h("input", { class: "grow", type: "email", placeholder: "nombre@" + S.domain });
+  var add = h("button", { class: "b p", text: "Agregar administrador", on: { click: function () {
+    api("POST", "/admins", { email: email.value }).then(function () { toast("Administrador agregado"); load(); }).catch(function (e) { toast(e.message, true); });
+  } } });
+
+  var rows = S.fixedAdmins.map(function (e) {
+    return h("tr", {}, h("td", { text: e }), h("td", {}, h("span", { class: "pill", text: "Fijo (configuración)" })), h("td"));
+  }).concat(S.admins.map(function (a) {
+    return h("tr", {},
+      h("td", { text: a.email }),
+      h("td", { class: "muted", text: fmtDate(a.addedAt) + " · " + (a.addedBy || "") }),
+      h("td", {}, a.email === S.me ? h("span", { class: "muted", text: "(vos)" }) : h("button", { class: "b i d", text: "Quitar", on: { click: function () {
+        if (!confirm("¿Quitar a " + a.email + " como administrador?")) return;
+        api("DELETE", "/admins/" + encodeURIComponent(a.email)).then(function () { toast("Quitado"); load(); }).catch(function (e) { toast(e.message, true); });
+      } } }))
+    );
+  }));
+
+  return h("div", {},
+    h("div", { class: "card" },
+      h("h2", { text: "Agregar administrador" }),
+      h("p", { class: "muted", text: "Solo cuentas @" + S.domain + ". Ingresan con Microsoft y ven el menú de administración." }),
+      h("div", { class: "row" }, email, add)
+    ),
+    h("div", { class: "card" },
+      h("h2", { text: "Administradores" }),
+      h("table", {}, h("thead", {}, h("tr", {}, h("th", { text: "Correo" }), h("th", { text: "Alta" }), h("th"))), h("tbody", {}, rows))
+    )
+  );
+}
+
+load();
+</script>
+</body>
+</html>

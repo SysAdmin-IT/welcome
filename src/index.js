@@ -1,127 +1,245 @@
-import { pages, theme, avatar, aliases } from "./links.js";
+import { aliases } from "./seed.js";
+import { randomString } from "./crypto.js";
+import {
+  getContent, saveContent, validateContent,
+  getAdmins, saveAdmins, bootstrapAdmins, isAdmin,
+  getGuests, saveGuests,
+  listFiles, getFile, putFile, deleteFile,
+  normEmail, isEmail, isCorporate, corporateDomain,
+  MAX_GUESTS, MAX_FILE_BYTES,
+} from "./store.js";
+import { getSession, startEntraLogin, finishEntraLogin, finishGuestLogin, logoutCookie } from "./auth.js";
+import { accessConfigured, syncGuestsToAccess, revokeGuestInAccess } from "./access.js";
+import { html, renderPage, renderLogin, renderMessage } from "./render.js";
+import { adminHtml } from "./admin.js";
 
-const esc = (s = "") =>
-  String(s)
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;");
+const json = (data, status = 200) =>
+  new Response(JSON.stringify(data), { status, headers: { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" } });
 
-// ¿Existe este archivo en public/?
-async function assetExists(env, origin, path) {
-  if (!env.ASSETS || !path) return false;
-  try {
-    const res = await env.ASSETS.fetch(new Request(origin + path, { method: "HEAD" }));
-    return res.ok;
-  } catch {
-    return false;
-  }
+const SECURITY_HEADERS = {
+  "X-Content-Type-Options": "nosniff",
+  "Referrer-Policy": "strict-origin-when-cross-origin",
+  "X-Frame-Options": "DENY",
+};
+
+function withSecurity(res) {
+  const r = new Response(res.body, res);
+  for (const [k, v] of Object.entries(SECURITY_HEADERS)) if (!r.headers.has(k)) r.headers.set(k, v);
+  return r;
 }
 
-// Decide a dónde apunta cada botón
-async function resolveLink(env, origin, link) {
-  if (link.page) return { href: link.page, external: false, kind: "" };
-  if (link.file && (await assetExists(env, origin, link.file))) {
-    const kind = link.file.toLowerCase().endsWith(".pdf") ? "PDF" : "";
-    return { href: link.file, external: true, kind };
-  }
-  if (link.url) {
-    const kind = link.url.includes("docs.google.com/forms") ? "Formulario" : "";
-    return { href: link.url, external: true, kind };
-  }
-  return null;
-}
-
-async function renderPage(env, origin, page) {
-  const avatarSrc = (await assetExists(env, origin, avatar.file)) ? avatar.file : avatar.url;
-
-  const sectionsHtml = [];
-  for (const s of page.sections) {
-    const buttons = [];
-    for (const link of s.links) {
-      const r = await resolveLink(env, origin, link);
-      if (!r) {
-        buttons.push(`<div class="btn disabled" title="Archivo pendiente">${esc(link.label)}</div>`);
-        continue;
-      }
-      const tag = r.kind ? `<span class="tag">${esc(r.kind)}</span>` : "";
-      const target = r.external ? ` target="_blank" rel="noopener noreferrer"` : "";
-      const arrow = r.external ? "" : `<span class="arrow">›</span>`;
-      buttons.push(`<a class="btn" href="${esc(r.href)}"${target}>${esc(link.label)}${tag}${arrow}</a>`);
-    }
-    sectionsHtml.push(`
-      <section>
-        ${s.title ? `<h2>${esc(s.title)}</h2>` : ""}
-        ${buttons.join("\n")}
-      </section>`);
-  }
-
-  const back = page.back ? `<a class="back" href="${esc(page.back)}">‹ Volver</a>` : "";
-
-  return `<!DOCTYPE html>
-<html lang="es">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>${esc(page.title)}</title>
-<link rel="icon" href="${esc(avatarSrc)}">
-<style>
-  :root{--bg:${theme.background};--card:${theme.card};--text:${theme.text};--muted:${theme.muted};--accent:${theme.accent}}
-  *{box-sizing:border-box}
-  body{margin:0;font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;background:var(--bg);color:var(--text);min-height:100vh}
-  main{max-width:580px;margin:0 auto;padding:40px 20px 64px;text-align:center;position:relative}
-  .back{position:absolute;left:20px;top:20px;color:var(--muted);text-decoration:none;font-size:.95rem}
-  .back:hover{color:var(--accent)}
-  .avatar{width:96px;height:96px;border-radius:50%;object-fit:cover;box-shadow:0 2px 10px rgba(0,0,0,.12);margin-top:16px}
-  h1{font-size:1.25rem;margin:14px 0 4px}
-  section{margin-top:28px}
-  h2{font-size:1rem;font-weight:600;color:var(--muted);margin:0 0 12px}
-  .btn{display:flex;align-items:center;justify-content:center;gap:8px;position:relative;
-       background:var(--card);color:var(--text);text-decoration:none;font-weight:500;
-       padding:16px 44px;margin:0 0 12px;border-radius:14px;border:1px solid rgba(0,0,0,.06);
-       box-shadow:0 1px 3px rgba(0,0,0,.06);transition:transform .15s,box-shadow .15s,border-color .15s}
-  a.btn:hover{transform:translateY(-2px);box-shadow:0 6px 16px rgba(0,0,0,.1);border-color:var(--accent)}
-  .btn.disabled{opacity:.5;cursor:not-allowed}
-  .tag{font-size:.7rem;font-weight:600;color:var(--accent);border:1px solid var(--accent);border-radius:6px;padding:1px 6px}
-  .arrow{position:absolute;right:18px;font-size:1.4rem;color:var(--muted)}
-</style>
-</head>
-<body>
-<main>
-  ${back}
-  <img class="avatar" src="${esc(avatarSrc)}" alt="">
-  <h1>${esc(page.heading)}</h1>
-  ${sectionsHtml.join("\n")}
-</main>
-</body>
-</html>`;
+function checkConfig(env) {
+  const missing = ["ENTRA_TENANT_ID", "ENTRA_CLIENT_ID", "ENTRA_CLIENT_SECRET", "SESSION_SECRET"].filter((k) => !env[k]);
+  if (!env.DATA) missing.push("binding KV 'DATA'");
+  return missing;
 }
 
 export default {
   async fetch(request, env) {
-    const url = new URL(request.url);
-    let path = url.pathname.replace(/\/+$/, "") || "/";
-    if (path === "/index.html") path = "/";
-
-    // Direcciones viejas de Linktree
-    if (aliases[path]) return Response.redirect(url.origin + aliases[path], 301);
-
-    // Páginas del sitio
-    if (pages[path]) {
-      return new Response(await renderPage(env, url.origin, pages[path]), {
-        headers: {
-          "content-type": "text/html; charset=utf-8",
-          "cache-control": "public, max-age=300",
-        },
-      });
+    try {
+      return withSecurity(await handle(request, env));
+    } catch (e) {
+      console.error(e);
+      return renderMessage("Error", "Ocurrió un error inesperado. Intentá de nuevo en unos minutos.", 500);
     }
-
-    // Archivos de public/ (PDFs, imágenes)
-    if (env.ASSETS) {
-      const res = await env.ASSETS.fetch(request);
-      if (res.status !== 404) return res;
-    }
-
-    return Response.redirect(url.origin + "/", 302);
   },
 };
+
+async function handle(request, env) {
+  const url = new URL(request.url);
+  let path = url.pathname.replace(/\/+$/, "") || "/";
+
+  const missing = checkConfig(env);
+  if (missing.length) {
+    return renderMessage("Falta configuración", `Faltan estas variables o secretos en el Worker: ${missing.join(", ")}. Revisá el README.`, 500);
+  }
+
+  // ---------- Rutas sin sesión ----------
+  if (aliases[path]) return Response.redirect(url.origin + aliases[path], 301);
+  if (path === "/auth/login") return startEntraLogin(request, env);
+  if (path === "/auth/callback") {
+    const r = await finishEntraLogin(request, env);
+    if (r.response) return r.response;
+    return html(renderLogin(await getContent(env), { error: r.error, guestEnabled: !!env.GUEST_GATEWAY_URL }), 403);
+  }
+  if (path === "/auth/invitado") {
+    if (!env.GUEST_GATEWAY_URL) return renderMessage("No disponible", "El acceso de invitados todavía no está configurado.", 404);
+    return Response.redirect(env.GUEST_GATEWAY_URL, 302);
+  }
+  if (path === "/auth/guest-callback") {
+    const r = await finishGuestLogin(request, env);
+    if (r.response) return r.response;
+    return html(renderLogin(await getContent(env), { error: r.error, guestEnabled: !!env.GUEST_GATEWAY_URL }), 403);
+  }
+  if (path === "/logout") {
+    return new Response(null, { status: 302, headers: { Location: "/login", "Set-Cookie": logoutCookie() } });
+  }
+
+  const content = await getContent(env);
+
+  // La foto de perfil se muestra también en la pantalla de login
+  if (path.startsWith("/f/") && path.slice(3) === content.settings?.avatarFileId) return serveFile(env, path.slice(3));
+
+  const session = await getSession(request, env);
+
+  if (path === "/login") {
+    if (session) return Response.redirect(url.origin + "/", 302);
+    return html(renderLogin(content, { returnTo: url.searchParams.get("return") || "/", guestEnabled: !!env.GUEST_GATEWAY_URL }));
+  }
+
+  // ---------- A partir de acá, todo requiere sesión ----------
+  if (!session) {
+    if (path.startsWith("/admin/api/")) return json({ error: "Sesión vencida. Recargá la página." }, 401);
+    return Response.redirect(`${url.origin}/login?return=${encodeURIComponent(path)}`, 302);
+  }
+
+  const admin = session.kind === "emp" && (await isAdmin(env, session.email));
+
+  if (path === "/admin" || path.startsWith("/admin/")) {
+    if (!admin) return renderMessage("Sin permiso", "Esta sección es solo para administradores.", 403);
+    if (path === "/admin") return html(adminHtml(), 200, { "Content-Security-Policy": "default-src 'self'; img-src 'self' https: data:; style-src 'unsafe-inline'; script-src 'unsafe-inline'; frame-ancestors 'none'" });
+    return adminApi(request, env, url, path, session);
+  }
+
+  if (path.startsWith("/f/")) return serveFile(env, path.slice(3));
+
+  if (content.pages[path]) {
+    const fileIds = new Set((await listFiles(env)).map((f) => f.id));
+    return html(renderPage(content, path, session, admin, fileIds));
+  }
+
+  // Archivos estáticos (public/)
+  if (env.ASSETS) {
+    const res = await env.ASSETS.fetch(request);
+    if (res.status !== 404) return res;
+  }
+  return Response.redirect(url.origin + "/", 302);
+}
+
+async function serveFile(env, id) {
+  const f = await getFile(env, id);
+  if (!f || !f.value) return renderMessage("No encontrado", "El archivo no existe o fue eliminado.", 404);
+  const m = f.metadata || {};
+  const safeName = String(m.name || "archivo").replace(/[^\w.\- ]+/g, "_");
+  return new Response(f.value, {
+    headers: {
+      "content-type": m.type || "application/octet-stream",
+      "content-disposition": `inline; filename="${safeName}"`,
+      "cache-control": "private, max-age=300",
+    },
+  });
+}
+
+// ====================== API del panel de administración ======================
+async function adminApi(request, env, url, path, session) {
+  const method = request.method;
+
+  // Protección CSRF: las modificaciones solo se aceptan desde el mismo sitio
+  if (method !== "GET") {
+    const origin = request.headers.get("Origin");
+    if (origin !== url.origin) return json({ error: "Origen no permitido" }, 403);
+  }
+
+  const sub = path.slice("/admin/api".length);
+
+  // Estado completo
+  if (sub === "/state" && method === "GET") {
+    const [content, admins, guests, files] = await Promise.all([getContent(env), getAdmins(env), getGuests(env), listFiles(env)]);
+    return json({
+      me: session.email,
+      domain: corporateDomain(env),
+      content,
+      admins,
+      fixedAdmins: bootstrapAdmins(env),
+      guests,
+      maxGuests: MAX_GUESTS,
+      maxFileMB: MAX_FILE_BYTES / 1024 / 1024,
+      files,
+      accessConfigured: accessConfigured(env),
+      guestGateway: env.GUEST_GATEWAY_URL || "",
+    });
+  }
+
+  // Contenido
+  if (sub === "/content" && method === "PUT") {
+    const body = await request.json().catch(() => null);
+    const err = validateContent(body);
+    if (err) return json({ error: err }, 400);
+    await saveContent(env, body);
+    return json({ ok: true });
+  }
+
+  // Administradores
+  if (sub === "/admins" && method === "POST") {
+    const { email } = await request.json().catch(() => ({}));
+    const e = normEmail(email);
+    if (!isEmail(e)) return json({ error: "Correo inválido" }, 400);
+    if (!isCorporate(env, e)) return json({ error: `Los administradores tienen que ser @${corporateDomain(env)}` }, 400);
+    const list = await getAdmins(env);
+    if (list.some((a) => a.email === e) || bootstrapAdmins(env).includes(e)) return json({ error: "Ya es administrador" }, 400);
+    list.push({ email: e, addedBy: session.email, addedAt: new Date().toISOString() });
+    await saveAdmins(env, list);
+    return json({ ok: true });
+  }
+  if (sub.startsWith("/admins/") && method === "DELETE") {
+    const e = normEmail(decodeURIComponent(sub.slice(8)));
+    if (bootstrapAdmins(env).includes(e)) return json({ error: "Este administrador está fijado en la configuración del Worker (ADMIN_EMAILS)" }, 400);
+    if (e === session.email) return json({ error: "No podés quitarte a vos mismo" }, 400);
+    await saveAdmins(env, (await getAdmins(env)).filter((a) => a.email !== e));
+    return json({ ok: true });
+  }
+
+  // Invitados (correos externos)
+  if (sub === "/guests" && method === "POST") {
+    const { email, note } = await request.json().catch(() => ({}));
+    const e = normEmail(email);
+    if (!isEmail(e)) return json({ error: "Correo inválido" }, 400);
+    if (isCorporate(env, e)) return json({ error: `Los correos @${corporateDomain(env)} ya tienen acceso con Microsoft; no hace falta registrarlos.` }, 400);
+    const list = await getGuests(env);
+    if (list.some((g) => g.email === e)) return json({ error: "Ese correo ya está registrado" }, 400);
+    if (list.length >= MAX_GUESTS) return json({ error: `Se alcanzó el máximo de ${MAX_GUESTS} correos externos. Dá de baja alguno primero.` }, 400);
+    list.push({ email: e, note: String(note || "").slice(0, 120), addedBy: session.email, addedAt: new Date().toISOString() });
+    await saveGuests(env, list);
+    const sync = await syncGuestsToAccess(env, list.map((g) => g.email));
+    return json({ ok: true, sync });
+  }
+  if (sub.startsWith("/guests/") && method === "DELETE") {
+    const e = normEmail(decodeURIComponent(sub.slice(8)));
+    const list = (await getGuests(env)).filter((g) => g.email !== e);
+    await saveGuests(env, list);
+    const sync = await syncGuestsToAccess(env, list.map((g) => g.email));
+    await revokeGuestInAccess(env, e);
+    return json({ ok: true, sync });
+  }
+  if (sub === "/guests/sync" && method === "POST") {
+    const list = await getGuests(env);
+    return json({ ok: true, sync: await syncGuestsToAccess(env, list.map((g) => g.email)) });
+  }
+
+  // Archivos
+  if (sub === "/files" && method === "POST") {
+    const form = await request.formData().catch(() => null);
+    const file = form && form.get("file");
+    if (!file || typeof file === "string") return json({ error: "No se recibió ningún archivo" }, 400);
+    if (file.size > MAX_FILE_BYTES) return json({ error: `El archivo supera ${MAX_FILE_BYTES / 1024 / 1024} MB` }, 400);
+    const allowed = ["application/pdf", "image/jpeg", "image/png", "image/webp", "image/gif"];
+    if (!allowed.includes(file.type)) return json({ error: "Solo se aceptan PDF o imágenes (JPG, PNG, WEBP, GIF)" }, 400);
+    const id = randomString(12);
+    const meta = { name: String(file.name || "archivo").slice(0, 150), type: file.type, size: file.size, uploadedAt: new Date().toISOString(), uploadedBy: session.email };
+    await putFile(env, id, await file.arrayBuffer(), meta);
+    return json({ ok: true, file: { id, ...meta } });
+  }
+  if (sub.startsWith("/files/") && method === "DELETE") {
+    const id = sub.slice(7);
+    const content = await getContent(env);
+    const used = Object.entries(content.pages).flatMap(([slug, p]) =>
+      p.sections.flatMap((s) => s.links.filter((l) => l.type === "file" && l.value === id).map((l) => `${slug} → ${l.label}`))
+    );
+    if (content.settings?.avatarFileId === id) used.push("foto de perfil");
+    if (used.length) return json({ error: `El archivo está en uso: ${used.join(", ")}. Cambiá esos botones primero.` }, 400);
+    await deleteFile(env, id);
+    return json({ ok: true });
+  }
+
+  return json({ error: "Ruta no encontrada" }, 404);
+}

@@ -3,10 +3,31 @@
   "name": "welcome",
   "main": "src/index.js",
   "compatibility_date": "2026-11-01",
+  "workers_dev": true,
+  // Las URLs de vista previa quedarían sin login de Entra (otra dirección): se desactivan.
+  "preview_urls": false,
   "assets": {
     "directory": "./public",
     "binding": "ASSETS",
     "run_worker_first": true
   },
-  "observability": { "enabled": true }
+  "kv_namespaces": [
+    // Creá el KV en Cloudflare (Storage & Databases > KV) y pegá su ID acá
+    { "binding": "DATA", "id": "PEGAR-ID-DEL-KV-AQUI" }
+  ],
+  "vars": {
+    "CORPORATE_DOMAIN": "diagnosticomaipu.com.ar",
+    // Administradores fijos (separados por coma). No se pueden quitar desde el panel.
+    "ADMIN_EMAILS": "sistemas@diagnosticomaipu.com.ar",
+    // Datos públicos de la app registrada en Entra ID
+    "ENTRA_TENANT_ID": "PEGAR-TENANT-ID",
+    "ENTRA_CLIENT_ID": "PEGAR-CLIENT-ID",
+    // Dirección del Worker de invitados (vacío = botón de invitado oculto)
+    "GUEST_GATEWAY_URL": "https://welcome-invitados.sistemas-97d.workers.dev",
+    // Cloudflare Access (para sincronizar la lista de correos externos)
+    "CF_ACCOUNT_ID": "PEGAR-ACCOUNT-ID",
+    "CF_ACCESS_POLICY_ID": "PEGAR-ID-DE-LA-POLITICA"
+  }
+  // Secretos (NO van en este archivo; se cargan en Settings > Variables and Secrets):
+  //   ENTRA_CLIENT_SECRET, SESSION_SECRET, GUEST_LINK_SECRET, CF_API_TOKEN
 }
