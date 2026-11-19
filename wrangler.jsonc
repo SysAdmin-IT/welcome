@@ -26,9 +26,9 @@
     "GUEST_GATEWAY_URL": "https://welcome-invitados.sistemas-97d.workers.dev",
     // Cloudflare Access (para sincronizar la lista de correos externos)
     "CF_ACCOUNT_ID": "97d9909480820eb104ce3e2bb491b749",
-    "CF_ACCESS_POLICY_ID": "PEGAR-ID-DE-LA-POLITICA",
+    "CF_ACCESS_POLICY_ID": "330f9ca6-48da-46e7-b431-c03588556923",
     // Solo si la política es "De la app" (no reutilizable)
-    "CF_ACCESS_APP_ID": ""
+    "CF_ACCESS_APP_ID": "e4d7e55c-8c08-4f2f-bbae-d595ecc7cb8b"
   }
   // Secretos (NO van en este archivo; se cargan en Settings > Variables and Secrets):
   //   ENTRA_CLIENT_SECRET, SESSION_SECRET, GUEST_LINK_SECRET, CF_API_TOKEN
