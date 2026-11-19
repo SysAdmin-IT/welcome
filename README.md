@@ -118,6 +118,12 @@ En wrangler.jsonc:
 "GUEST_MODE": "entra",
 "ENTRA_DELETE_GUESTS": "false",
 ```
+### Vencimiento de los invitados
+Cada correo externo tiene acceso por **`GUEST_DAYS` días** (30 por defecto) desde el alta o la última renovación.
+- Al vencer, pierde el acceso **en el momento**, aunque tenga la sesión abierta.
+- Una tarea programada diaria (`"triggers": { "crons": ["0 6 * * *"] }`, 03:00 de Argentina) lo **borra de la lista**; si `ENTRA_DELETE_GUESTS` es `"true"`, también borra su cuenta invitada de Entra.
+- En el panel, la columna **Vence** muestra la fecha y los días que quedan; **Renovar** extiende el plazo desde hoy.
+
 En este modo el Worker **welcome-invitados** y Cloudflare Access ya no se usan: podés quitar la protección de Access y borrar ese Worker para liberar los puestos de Zero Trust.
 
 ---

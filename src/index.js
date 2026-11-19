@@ -3,7 +3,7 @@ import { randomString } from "./crypto.js";
 import {
   getContent, saveContent, validateContent,
   getAdmins, saveAdmins, bootstrapAdmins, isAdmin,
-  getGuests, saveGuests,
+  getGuests, saveGuests, purgeExpiredGuests, newExpiry, guestExpiresAt, guestDays,
   listFiles, getFile, putFile, deleteFile,
   normEmail, isEmail, isCorporate, corporateDomain,
   MAX_GUESTS, MAX_FILE_BYTES,
@@ -17,7 +17,7 @@ import { adminHtml } from "./admin.js";
 const json = (data, status = 200) =>
   new Response(JSON.stringify(data), { status, headers: { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" } });
 
-const APP_VERSION = "4.0";
+const APP_VERSION = "4.1";
 
 const SECURITY_HEADERS = {
   "X-App-Version": APP_VERSION,
@@ -41,18 +41,37 @@ function checkConfig(env) {
   return missing;
 }
 
+// Limpieza de invitados vencidos: los saca de la lista y, según el modo,
+// actualiza Cloudflare Access o borra la cuenta invitada de Entra.
+async function cleanupExpiredGuests(env) {
+  const { removed, remaining } = await purgeExpiredGuests(env);
+  if (!removed.length) return { removed: [] };
+  if (guestMode(env) === "cloudflare") {
+    await syncGuestsToAccess(env, remaining.map((g) => g.email));
+    for (const g of removed) await revokeGuestInAccess(env, g.email);
+  } else {
+    for (const g of removed) await removeGuestFromEntra(env, g.entraUserId);
+  }
+  console.log(`Invitados vencidos eliminados: ${removed.map((g) => g.email).join(", ")}`);
+  return { removed: removed.map((g) => g.email) };
+}
+
 export default {
-  async fetch(request, env) {
+  async fetch(request, env, ctx) {
     try {
-      return withSecurity(await handle(request, env));
+      return withSecurity(await handle(request, env, ctx));
     } catch (e) {
       console.error(e);
       return renderMessage("Error", "Ocurrió un error inesperado. Intentá de nuevo en unos minutos.", 500);
     }
   },
+  // Tarea programada (triggers.crons en wrangler.jsonc): una vez por día
+  async scheduled(event, env, ctx) {
+    ctx.waitUntil(cleanupExpiredGuests(env));
+  },
 };
 
-async function handle(request, env) {
+async function handle(request, env, ctx) {
   const url = new URL(request.url);
   let path = url.pathname.replace(/\/+$/, "") || "/";
 
@@ -112,7 +131,7 @@ async function handle(request, env) {
       );
     }
     if (path === "/admin") return html(adminHtml(), 200, { "Content-Security-Policy": "default-src 'self'; img-src 'self' https: data:; style-src 'unsafe-inline'; script-src 'unsafe-inline'; frame-ancestors 'none'" });
-    return adminApi(request, env, url, path, session);
+    return adminApi(request, env, url, path, session, ctx);
   }
 
   if (path.startsWith("/f/")) return serveFile(env, path.slice(3));
@@ -145,7 +164,7 @@ async function serveFile(env, id) {
 }
 
 // ====================== API del panel de administración ======================
-async function adminApi(request, env, url, path, session) {
+async function adminApi(request, env, url, path, session, ctx) {
   const method = request.method;
 
   // Protección CSRF: las modificaciones solo se aceptan desde el mismo sitio
@@ -158,7 +177,9 @@ async function adminApi(request, env, url, path, session) {
 
   // Estado completo
   if (sub === "/state" && method === "GET") {
-    const [content, admins, guests, files] = await Promise.all([getContent(env), getAdmins(env), getGuests(env), listFiles(env)]);
+    await cleanupExpiredGuests(env);
+    const [content, admins, rawGuests, files] = await Promise.all([getContent(env), getAdmins(env), getGuests(env), listFiles(env)]);
+    const guests = rawGuests.map((g) => ({ ...g, expiresAt: guestExpiresAt(env, g) }));
     return json({
       me: session.email,
       domain: corporateDomain(env),
@@ -167,6 +188,7 @@ async function adminApi(request, env, url, path, session) {
       fixedAdmins: bootstrapAdmins(env),
       guests,
       maxGuests: MAX_GUESTS,
+      guestDays: guestDays(env),
       maxFileMB: MAX_FILE_BYTES / 1024 / 1024,
       files,
       accessConfigured: accessConfigured(env),
@@ -210,10 +232,11 @@ async function adminApi(request, env, url, path, session) {
     const e = normEmail(email);
     if (!isEmail(e)) return json({ error: "Correo inválido" }, 400);
     if (isCorporate(env, e)) return json({ error: `Los correos @${corporateDomain(env)} ya tienen acceso con Microsoft; no hace falta registrarlos.` }, 400);
+    await cleanupExpiredGuests(env);
     const list = await getGuests(env);
     if (list.some((g) => g.email === e)) return json({ error: "Ese correo ya está registrado" }, 400);
     if (list.length >= MAX_GUESTS) return json({ error: `Se alcanzó el máximo de ${MAX_GUESTS} correos externos. Dá de baja alguno primero.` }, 400);
-    const rec = { email: e, note: String(note || "").slice(0, 120), addedBy: session.email, addedAt: new Date().toISOString() };
+    const rec = { email: e, note: String(note || "").slice(0, 120), addedBy: session.email, addedAt: new Date().toISOString(), expiresAt: newExpiry(env) };
     let sync;
     if (guestMode(env) === "entra") {
       sync = await inviteGuest(env, { email: e, displayName: rec.note, redirectUrl: url.origin + "/" });
@@ -223,6 +246,17 @@ async function adminApi(request, env, url, path, session) {
     await saveGuests(env, list);
     if (guestMode(env) === "cloudflare") sync = await syncGuestsToAccess(env, list.map((g) => g.email));
     return json({ ok: true, sync });
+  }
+  if (sub.startsWith("/guests/") && sub.endsWith("/renew") && method === "POST") {
+    const e = normEmail(decodeURIComponent(sub.slice(8, -6)));
+    const list = await getGuests(env);
+    const rec = list.find((g) => g.email === e);
+    if (!rec) return json({ error: "Ese correo no está registrado (puede que ya haya vencido)" }, 404);
+    rec.expiresAt = newExpiry(env);
+    rec.renewedBy = session.email;
+    rec.renewedAt = new Date().toISOString();
+    await saveGuests(env, list);
+    return json({ ok: true, sync: { ok: true, message: `Acceso renovado hasta el ${new Date(rec.expiresAt).toLocaleDateString("es-AR", { timeZone: "America/Argentina/Buenos_Aires" })}.` } });
   }
   if (sub.startsWith("/guests/") && sub.endsWith("/invite") && method === "POST") {
     const e = normEmail(decodeURIComponent(sub.slice(8, -7)));

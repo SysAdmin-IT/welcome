@@ -72,9 +72,39 @@ export async function getGuests(env) {
 export async function saveGuests(env, list) {
   await env.DATA.put("guests", JSON.stringify(list));
 }
+// ---------- Vencimiento de invitados ----------
+// GUEST_DAYS: días de acceso desde el alta o la última renovación (por defecto 30).
+export function guestDays(env) {
+  const n = Number(env.GUEST_DAYS);
+  return Number.isFinite(n) && n > 0 ? n : 30;
+}
+export function newExpiry(env, from = Date.now()) {
+  return new Date(from + guestDays(env) * 86400000).toISOString();
+}
+// Invitados viejos (sin expiresAt) vencen a los GUEST_DAYS de su alta.
+export function guestExpiresAt(env, g) {
+  if (g.expiresAt) return g.expiresAt;
+  const base = Date.parse(g.addedAt || "") || Date.now();
+  return newExpiry(env, base);
+}
+export function isExpired(env, g, now = Date.now()) {
+  return Date.parse(guestExpiresAt(env, g)) <= now;
+}
+
 export async function isGuest(env, email) {
   email = normEmail(email);
-  return (await getGuests(env)).some((g) => g.email === email);
+  const g = (await getGuests(env)).find((x) => x.email === email);
+  return Boolean(g && !isExpired(env, g));
+}
+
+// Saca de la lista a los vencidos. Devuelve { removed, remaining }.
+export async function purgeExpiredGuests(env) {
+  const all = await getGuests(env);
+  const removed = all.filter((g) => isExpired(env, g));
+  if (!removed.length) return { removed, remaining: all };
+  const remaining = all.filter((g) => !isExpired(env, g));
+  await saveGuests(env, remaining);
+  return { removed, remaining };
 }
 
 // ---------- Archivos ----------

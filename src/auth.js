@@ -163,7 +163,7 @@ export async function finishEntraLogin(request, env) {
     return {
       error:
         guestMode(env) === "entra"
-          ? `El correo ${email} no está habilitado para ingresar. Pedile acceso a un administrador.`
+          ? `El correo ${email} no está habilitado o su acceso venció. Pedile acceso a un administrador.`
           : `Solo pueden ingresar con Microsoft las cuentas @${corporateDomain(env)}. Ingresaste como ${email}.`,
     };
   }
@@ -184,7 +184,7 @@ export async function finishGuestLogin(request, env) {
     return { error: "Las cuentas corporativas ingresan con Microsoft, no como invitado." };
   }
   if (!(await isGuest(env, email))) {
-    return { error: `El correo ${email} no está habilitado. Pedile acceso a un administrador.` };
+    return { error: `El correo ${email} no está habilitado o su acceso venció. Pedile acceso a un administrador.` };
   }
   const headers = new Headers({ Location: "/" });
   headers.append("Set-Cookie", await sessionCookie(env, email, "guest"));
