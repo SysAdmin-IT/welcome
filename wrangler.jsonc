@@ -13,15 +13,15 @@
   },
   "kv_namespaces": [
     // Creá el KV en Cloudflare (Storage & Databases > KV) y pegá su ID acá
-    { "binding": "DATA", "id": "PEGAR-ID-DEL-KV-AQUI" }
+    { "binding": "DATA", "id": "5c3b0a740c5540dfbee2c1ac38da38b9" }
   ],
   "vars": {
     "CORPORATE_DOMAIN": "diagnosticomaipu.com.ar",
     // Administradores fijos (separados por coma). No se pueden quitar desde el panel.
-    "ADMIN_EMAILS": "sistemas@diagnosticomaipu.com.ar",
+    "ADMIN_EMAILS": "sofiafabro@diagnosticomaipu.com.ar,jcalderon@diagnosticomaipu.com.ar",
     // Datos públicos de la app registrada en Entra ID
-    "ENTRA_TENANT_ID": "PEGAR-TENANT-ID",
-    "ENTRA_CLIENT_ID": "PEGAR-CLIENT-ID",
+    "ENTRA_TENANT_ID": "863f2a43-6a72-453c-8c6d-ebe61629b869",
+    "ENTRA_CLIENT_ID": "e17093f4-cda9-4906-9d3b-6b9b5cfac13e",
     // Dirección del Worker de invitados (vacío = botón de invitado oculto)
     "GUEST_GATEWAY_URL": "https://welcome-invitados.sistemas-97d.workers.dev",
     // Cloudflare Access (para sincronizar la lista de correos externos)
