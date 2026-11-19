@@ -29,9 +29,11 @@
     "CF_ACCESS_POLICY_ID": "330f9ca6-48da-46e7-b431-c03588556923",
     // Solo si la política es "De la app" (no reutilizable)
     "CF_ACCESS_APP_ID": ""
+    "GUEST_DAYS": "30",
   }
   // Secretos (NO van en este archivo; se cargan en Settings > Variables and Secrets):
   //   ENTRA_CLIENT_SECRET, SESSION_SECRET, GUEST_LINK_SECRET, CF_API_TOKEN
 "GUEST_MODE": "entra",
 "ENTRA_DELETE_GUESTS": "false",
+"triggers": { "crons": ["0 6 * * *"] },
 }
