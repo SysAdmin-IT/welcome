@@ -30,6 +30,7 @@ function shell(title, inner) {
   return `<!DOCTYPE html><html lang="es"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex">
+<meta name="app-version" content="3.1">
 <title>${esc(title)}</title><style>${CSS}</style></head><body><main>${inner}</main></body></html>`;
 }
 
@@ -85,7 +86,7 @@ export function renderLogin(content, { error = "", returnTo = "/", guestEnabled 
     "Ingresar",
     `${av ? `<img class="avatar" src="${esc(av)}" alt="">` : ""}
      <h1>${esc(content.settings.siteTitle || "Bienvenida")}</h1>
-     <p class="note">Ingresá para ver la información de bienvenida.</p>
+     <p class="note">Ingresá para ver la información de bienvenida.</p><!-- v3.1 -->
      ${error ? `<div class="error">${esc(error)}</div>` : ""}
      <section>
        <a class="btn primary" href="/auth/login?return=${encodeURIComponent(returnTo)}">Ingresar con cuenta de Diagnóstico Maipú</a>

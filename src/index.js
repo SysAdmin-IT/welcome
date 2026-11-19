@@ -16,7 +16,10 @@ import { adminHtml } from "./admin.js";
 const json = (data, status = 200) =>
   new Response(JSON.stringify(data), { status, headers: { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" } });
 
+const APP_VERSION = "3.1";
+
 const SECURITY_HEADERS = {
+  "X-App-Version": APP_VERSION,
   "X-Content-Type-Options": "nosniff",
   "Referrer-Policy": "strict-origin-when-cross-origin",
   "X-Frame-Options": "DENY",
