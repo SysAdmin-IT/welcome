@@ -18,7 +18,7 @@
   "vars": {
     "CORPORATE_DOMAIN": "diagnosticomaipu.com.ar",
     // Administradores fijos (separados por coma). No se pueden quitar desde el panel.
-    "ADMIN_EMAILS": "jcalderon@diagnosticomaipu.com.ar",
+    "ADMIN_EMAILS": "josephcalderon@diagnosticomaipu.com.ar",
     // Datos públicos de la app registrada en Entra ID
     "ENTRA_TENANT_ID": "863f2a43-6a72-453c-8c6d-ebe61629b869",
     "ENTRA_CLIENT_ID": "e17093f4-cda9-4906-9d3b-6b9b5cfac13e",
