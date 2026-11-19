@@ -8,10 +8,12 @@
   "observability": { "enabled": true },
   "vars": {
     // Dirección del sitio principal (sin barra final)
-    "MAIN_URL": "https://welcome.sistemas-97d.workers.dev",
-    // Se completa después de activar Cloudflare Access (ver README)
-    "TEAM_DOMAIN": "https://TU-EQUIPO.cloudflareaccess.com",
-    "POLICY_AUD": "PEGAR-AUD-AQUI"
+    "MAIN_URL": "https://welcome.sistemas-97d.workers.dev"
+    // Solo si protegés el Worker con el método clásico (workers.dev > Enable Cloudflare Access),
+    // agregá también:
+    //   "TEAM_DOMAIN": "https://TU-EQUIPO.cloudflareaccess.com",
+    //   "POLICY_AUD": "el AUD de la aplicación"
+    // Con la pestaña "Access" del Worker (método nuevo) no hacen falta.
   }
   // Secreto (no va en este archivo):  GUEST_LINK_SECRET  -> el mismo valor que en el Worker principal
 }

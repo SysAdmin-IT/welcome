@@ -47,7 +47,7 @@ Copiá el **ID** y pegalo en `wrangler.jsonc` (`"id": "PEGAR-ID-DEL-KV-AQUI"`).
 ### 3. Completar `wrangler.jsonc` del Worker principal
 - `ADMIN_EMAILS`: tu correo (y el de otro administrador de respaldo). Son administradores fijos que no se pueden quitar desde el panel. Solo se aceptan correos @diagnosticomaipu.com.ar.
 - `CF_ACCOUNT_ID`: Cloudflare → panel derecho de **Workers & Pages** (Account ID).
-- `CF_ACCESS_POLICY_ID`: se completa en el paso 6.
+- `CF_ACCESS_POLICY_ID` (y `CF_ACCESS_APP_ID` si corresponde): se completan en el paso 6.4.
 
 ### 4. Cargar los secretos del Worker `welcome`
 Workers & Pages → **welcome → Settings → Variables and Secrets → Add** (tipo **Secret**):
@@ -75,11 +75,15 @@ Después: **welcome-invitados → Settings → Variables and Secrets** → secre
 
 ### 6. Activar Cloudflare Access en el Worker de invitados
 1. **Zero Trust → Settings → Authentication → Login methods → Add new → One-time PIN** (si no está).
-2. **Workers & Pages → welcome-invitados → Settings → Domains & Routes → workers.dev → Enable Cloudflare Access**.
-3. El cuadro que aparece muestra **POLICY_AUD** y **TEAM_DOMAIN** → pegalos en `invitados/wrangler.jsonc`.
-4. **Manage Cloudflare Access** → en la aplicación, dejá como método de login solo **One-time PIN**.
-5. Abrí la política (se llama `welcome-invitados - Production`): el ID está en la dirección del navegador (`…/policies/<ID>`). Pegalo en `wrangler.jsonc` del principal como `CF_ACCESS_POLICY_ID`.
-   No hace falta cargar correos a mano: el panel `/admin` la reemplaza con la lista de invitados.
+2. **Workers & Pages → welcome-invitados → pestaña Access → Protect this Worker behind Access**.
+   - Traffic scope: **All traffic**
+   - Authentication policy: **Email domain** → `invalid.invalid` (es provisorio; el panel lo reemplaza por la lista de correos)
+   - **Apply Access**
+3. En Zero Trust, abrí la aplicación que se creó y dejá como método de login solo **One-time PIN**.
+4. Completá los pasos 7 y 8, entrá a `/admin → Accesos externos → 🔎 Buscar IDs de Access` y copiá
+   `CF_ACCESS_POLICY_ID` (y `CF_ACCESS_APP_ID` si la política figura como "De la app") en `wrangler.jsonc`.
+
+Con este método no hace falta `TEAM_DOMAIN` ni `POLICY_AUD`.
 
 ### 7. Crear el token de API de Cloudflare
 **My Profile → API Tokens → Create Token → Custom token**:

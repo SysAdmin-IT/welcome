@@ -333,8 +333,27 @@ function viewGuests() {
     );
   });
 
+  var found = h("div");
+  var discoverBtn = h("button", { class: "b", text: "🔎 Buscar IDs de Access", on: { click: function () {
+    found.textContent = "Buscando…";
+    api("GET", "/access/discover").then(function (d) {
+      found.textContent = "";
+      if (!d.ok) { found.appendChild(h("div", { class: "warn", text: d.message })); return; }
+      found.appendChild(h("p", { class: "muted", text: "Buscá la aplicación de welcome-invitados y copiá los IDs a wrangler.jsonc (CF_ACCESS_POLICY_ID y, si la política no es reutilizable, CF_ACCESS_APP_ID)." }));
+      var rows = [];
+      d.apps.forEach(function (a) {
+        (a.policies.length ? a.policies : [{ id: "—", name: "(sin políticas)", reusable: false }]).forEach(function (p) {
+          rows.push(h("tr", {}, h("td", { text: a.name }), h("td", { class: "muted", text: a.id }), h("td", { text: p.name }), h("td", { class: "muted", text: p.id }), h("td", { text: p.reusable ? "Reutilizable" : "De la app" })));
+        });
+      });
+      found.appendChild(h("table", {}, h("thead", {}, h("tr", {}, h("th", { text: "Aplicación" }), h("th", { text: "CF_ACCESS_APP_ID" }), h("th", { text: "Política" }), h("th", { text: "CF_ACCESS_POLICY_ID" }), h("th", { text: "Tipo" }))), h("tbody", {}, rows)));
+    }).catch(function (e) { found.textContent = e.message; });
+  } } });
+
   return h("div", {},
-    !S.accessConfigured ? h("div", { class: "warn", text: "Cloudflare Access todavía no está configurado en el Worker (CF_API_TOKEN, CF_ACCOUNT_ID, CF_ACCESS_POLICY_ID). Los correos se guardan, pero no se van a poder verificar hasta completar la configuración." }) : null,
+    !S.accessConfigured ? h("div", { class: "card" },
+      h("div", { class: "warn", text: "Cloudflare Access todavía no está configurado en el Worker (CF_API_TOKEN, CF_ACCOUNT_ID, CF_ACCESS_POLICY_ID). Los correos se guardan, pero no se van a poder verificar hasta completar la configuración." }),
+      h("div", { class: "row" }, discoverBtn), found) : null,
     h("div", { class: "card" },
       h("h2", { text: "Habilitar un correo externo" }),
       h("p", { class: "muted", text: "Para personas sin cuenta @" + S.domain + ". Al ingresar, Cloudflare les envía un código por correo para verificar que el correo es suyo. Máximo " + S.maxGuests + "." }),

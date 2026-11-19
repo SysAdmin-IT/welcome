@@ -9,7 +9,7 @@ import {
   MAX_GUESTS, MAX_FILE_BYTES,
 } from "./store.js";
 import { getSession, startEntraLogin, finishEntraLogin, finishGuestLogin, logoutCookie } from "./auth.js";
-import { accessConfigured, syncGuestsToAccess, revokeGuestInAccess } from "./access.js";
+import { accessConfigured, syncGuestsToAccess, revokeGuestInAccess, discoverAccess } from "./access.js";
 import { html, renderPage, renderLogin, renderMessage } from "./render.js";
 import { adminHtml } from "./admin.js";
 
@@ -210,6 +210,9 @@ async function adminApi(request, env, url, path, session) {
     const sync = await syncGuestsToAccess(env, list.map((g) => g.email));
     await revokeGuestInAccess(env, e);
     return json({ ok: true, sync });
+  }
+  if (sub === "/access/discover" && method === "GET") {
+    return json(await discoverAccess(env));
   }
   if (sub === "/guests/sync" && method === "POST") {
     const list = await getGuests(env);

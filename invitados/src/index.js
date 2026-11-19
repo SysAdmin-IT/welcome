@@ -61,23 +61,40 @@ function page(title, msg, status) {
   );
 }
 
+const configured = (v) => v && !/PEGAR|TU-EQUIPO/.test(v);
+
+// Obtiene el correo verificado por Cloudflare Access.
+// 1) Modo nuevo (pestaña "Access" del Worker): Cloudflare valida antes y entrega ctx.access.
+// 2) Modo clásico (workers.dev / aplicación self-hosted): se valida el JWT con TEAM_DOMAIN y POLICY_AUD.
+async function verifiedEmail(request, env, ctx) {
+  if (ctx && ctx.access) {
+    const identity = await ctx.access.getIdentity();
+    if (identity && identity.email) return identity.email;
+  }
+  if (configured(env.TEAM_DOMAIN) && configured(env.POLICY_AUD)) {
+    const token = request.headers.get("Cf-Access-Jwt-Assertion");
+    if (token) return (await verifyAccessJwt(token, env)).email;
+  }
+  return null;
+}
+
 export default {
-  async fetch(request, env) {
-    const missing = ["TEAM_DOMAIN", "POLICY_AUD", "GUEST_LINK_SECRET", "MAIN_URL"].filter((k) => !env[k]);
+  async fetch(request, env, ctx) {
+    const missing = ["GUEST_LINK_SECRET", "MAIN_URL"].filter((k) => !env[k]);
     if (missing.length) return page("Falta configuración", `Faltan variables: ${missing.join(", ")}`, 500);
 
-    const token = request.headers.get("Cf-Access-Jwt-Assertion");
-    if (!token) return page("Acceso denegado", "Este sitio tiene que estar protegido por Cloudflare Access.", 403);
-
-    let claims;
+    let email = null;
     try {
-      claims = await verifyAccessJwt(token, env);
+      email = await verifiedEmail(request, env, ctx);
     } catch (e) {
-      return page("Acceso denegado", "No se pudo verificar tu identidad.", 403);
+      email = null;
+    }
+    if (!email) {
+      return page("Acceso denegado", "No se pudo verificar tu identidad. Este sitio tiene que estar protegido por Cloudflare Access.", 403);
     }
 
     const pass = await signPass(
-      { e: String(claims.email).toLowerCase(), x: Math.floor(Date.now() / 1000) + 120 },
+      { e: String(email).toLowerCase(), x: Math.floor(Date.now() / 1000) + 120 },
       env.GUEST_LINK_SECRET
     );
     const main = env.MAIN_URL.replace(/\/+$/, "");
