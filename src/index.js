@@ -8,7 +8,8 @@ import {
   normEmail, isEmail, isCorporate, corporateDomain,
   MAX_GUESTS, MAX_FILE_BYTES,
 } from "./store.js";
-import { getSession, startEntraLogin, finishEntraLogin, finishGuestLogin, logoutCookie } from "./auth.js";
+import { getSession, startEntraLogin, finishEntraLogin, finishGuestLogin, logoutCookie, guestMode } from "./auth.js";
+import { inviteGuest, removeGuestFromEntra } from "./graph.js";
 import { accessConfigured, syncGuestsToAccess, revokeGuestInAccess, discoverAccess } from "./access.js";
 import { html, renderPage, renderLogin, renderMessage } from "./render.js";
 import { adminHtml } from "./admin.js";
@@ -16,7 +17,7 @@ import { adminHtml } from "./admin.js";
 const json = (data, status = 200) =>
   new Response(JSON.stringify(data), { status, headers: { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" } });
 
-const APP_VERSION = "3.1";
+const APP_VERSION = "4.0";
 
 const SECURITY_HEADERS = {
   "X-App-Version": APP_VERSION,
@@ -30,6 +31,9 @@ function withSecurity(res) {
   for (const [k, v] of Object.entries(SECURITY_HEADERS)) if (!r.headers.has(k)) r.headers.set(k, v);
   return r;
 }
+
+// Botón "Tengo un acceso de invitado" (Cloudflare Access) solo en modo cloudflare
+const cfGuests = (env) => guestMode(env) === "cloudflare" && !!env.GUEST_GATEWAY_URL;
 
 function checkConfig(env) {
   const missing = ["ENTRA_TENANT_ID", "ENTRA_CLIENT_ID", "ENTRA_CLIENT_SECRET", "SESSION_SECRET"].filter((k) => !env[k]);
@@ -63,16 +67,17 @@ async function handle(request, env) {
   if (path === "/auth/callback") {
     const r = await finishEntraLogin(request, env);
     if (r.response) return r.response;
-    return html(renderLogin(await getContent(env), { error: r.error, guestEnabled: !!env.GUEST_GATEWAY_URL }), 403);
+    return html(renderLogin(await getContent(env), { error: r.error, guestEnabled: cfGuests(env) }), 403);
   }
   if (path === "/auth/invitado") {
-    if (!env.GUEST_GATEWAY_URL) return renderMessage("No disponible", "El acceso de invitados todavía no está configurado.", 404);
+    if (!cfGuests(env)) return renderMessage("No disponible", "El acceso de invitados todavía no está configurado.", 404);
     return Response.redirect(env.GUEST_GATEWAY_URL, 302);
   }
   if (path === "/auth/guest-callback") {
+    if (!cfGuests(env)) return Response.redirect(url.origin + "/login", 302);
     const r = await finishGuestLogin(request, env);
     if (r.response) return r.response;
-    return html(renderLogin(await getContent(env), { error: r.error, guestEnabled: !!env.GUEST_GATEWAY_URL }), 403);
+    return html(renderLogin(await getContent(env), { error: r.error, guestEnabled: cfGuests(env) }), 403);
   }
   if (path === "/logout") {
     return new Response(null, { status: 302, headers: { Location: "/login", "Set-Cookie": logoutCookie() } });
@@ -87,7 +92,7 @@ async function handle(request, env) {
 
   if (path === "/login") {
     if (session) return Response.redirect(url.origin + "/", 302);
-    return html(renderLogin(content, { returnTo: url.searchParams.get("return") || "/", guestEnabled: !!env.GUEST_GATEWAY_URL }));
+    return html(renderLogin(content, { returnTo: url.searchParams.get("return") || "/", guestEnabled: cfGuests(env) }));
   }
 
   // ---------- A partir de acá, todo requiere sesión ----------
@@ -99,7 +104,13 @@ async function handle(request, env) {
   const admin = session.kind === "emp" && (await isAdmin(env, session.email));
 
   if (path === "/admin" || path.startsWith("/admin/")) {
-    if (!admin) return renderMessage("Sin permiso", "Esta sección es solo para administradores.", 403);
+    if (!admin) {
+      return renderMessage(
+        "Sin permiso",
+        `Esta sección es solo para administradores. Ingresaste como ${session.email}: ese correo tiene que estar en ADMIN_EMAILS (wrangler.jsonc) o haber sido agregado por otro administrador.`,
+        403
+      );
+    }
     if (path === "/admin") return html(adminHtml(), 200, { "Content-Security-Policy": "default-src 'self'; img-src 'self' https: data:; style-src 'unsafe-inline'; script-src 'unsafe-inline'; frame-ancestors 'none'" });
     return adminApi(request, env, url, path, session);
   }
@@ -159,6 +170,7 @@ async function adminApi(request, env, url, path, session) {
       maxFileMB: MAX_FILE_BYTES / 1024 / 1024,
       files,
       accessConfigured: accessConfigured(env),
+      guestMode: guestMode(env),
       guestGateway: env.GUEST_GATEWAY_URL || "",
     });
   }
@@ -201,17 +213,41 @@ async function adminApi(request, env, url, path, session) {
     const list = await getGuests(env);
     if (list.some((g) => g.email === e)) return json({ error: "Ese correo ya está registrado" }, 400);
     if (list.length >= MAX_GUESTS) return json({ error: `Se alcanzó el máximo de ${MAX_GUESTS} correos externos. Dá de baja alguno primero.` }, 400);
-    list.push({ email: e, note: String(note || "").slice(0, 120), addedBy: session.email, addedAt: new Date().toISOString() });
+    const rec = { email: e, note: String(note || "").slice(0, 120), addedBy: session.email, addedAt: new Date().toISOString() };
+    let sync;
+    if (guestMode(env) === "entra") {
+      sync = await inviteGuest(env, { email: e, displayName: rec.note, redirectUrl: url.origin + "/" });
+      if (sync.ok) { rec.entraUserId = sync.userId; rec.invitedAt = new Date().toISOString(); }
+    }
+    list.push(rec);
     await saveGuests(env, list);
-    const sync = await syncGuestsToAccess(env, list.map((g) => g.email));
+    if (guestMode(env) === "cloudflare") sync = await syncGuestsToAccess(env, list.map((g) => g.email));
+    return json({ ok: true, sync });
+  }
+  if (sub.startsWith("/guests/") && sub.endsWith("/invite") && method === "POST") {
+    const e = normEmail(decodeURIComponent(sub.slice(8, -7)));
+    const list = await getGuests(env);
+    const rec = list.find((g) => g.email === e);
+    if (!rec) return json({ error: "Ese correo no está registrado" }, 404);
+    if (guestMode(env) !== "entra") return json({ error: "Las invitaciones de Microsoft solo se usan en modo entra" }, 400);
+    const sync = await inviteGuest(env, { email: e, displayName: rec.note, redirectUrl: url.origin + "/" });
+    if (sync.ok) { rec.entraUserId = sync.userId || rec.entraUserId; rec.invitedAt = new Date().toISOString(); await saveGuests(env, list); }
     return json({ ok: true, sync });
   }
   if (sub.startsWith("/guests/") && method === "DELETE") {
     const e = normEmail(decodeURIComponent(sub.slice(8)));
-    const list = (await getGuests(env)).filter((g) => g.email !== e);
+    const all = await getGuests(env);
+    const removed = all.find((g) => g.email === e);
+    const list = all.filter((g) => g.email !== e);
     await saveGuests(env, list);
-    const sync = await syncGuestsToAccess(env, list.map((g) => g.email));
-    await revokeGuestInAccess(env, e);
+    let sync;
+    if (guestMode(env) === "entra") {
+      sync = await removeGuestFromEntra(env, removed?.entraUserId);
+      sync.message = ("Acceso al sitio quitado. " + (sync.message || "")).trim();
+    } else {
+      sync = await syncGuestsToAccess(env, list.map((g) => g.email));
+      await revokeGuestInAccess(env, e);
+    }
     return json({ ok: true, sync });
   }
   if (sub === "/access/discover" && method === "GET") {

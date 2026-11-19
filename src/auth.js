@@ -1,6 +1,6 @@
 // Inicio de sesión: Microsoft Entra ID (empleados) y pase de invitado (Cloudflare Access).
 import { sign, verify, randomString, sha256b64url, b64urlDecode } from "./crypto.js";
-import { normEmail, isCorporate, isGuest } from "./store.js";
+import { normEmail, isCorporate, isGuest, corporateDomain } from "./store.js";
 
 const SESSION_COOKIE = "dm_sess";
 const OIDC_COOKIE = "dm_oidc";
@@ -43,8 +43,28 @@ function safeReturn(path) {
 }
 
 // ---------- Entra ID (OpenID Connect, código + PKCE) ----------
+// ENTRA_AUTHORITY solo se cambia para pruebas locales.
+function authority(env) {
+  return (env.ENTRA_AUTHORITY || "https://login.microsoftonline.com").replace(/\/+$/, "");
+}
 function entraBase(env) {
-  return `https://login.microsoftonline.com/${env.ENTRA_TENANT_ID}/oauth2/v2.0`;
+  return `${authority(env)}/${env.ENTRA_TENANT_ID}/oauth2/v2.0`;
+}
+
+// Invitados B2B: modo "entra" (por defecto) o "cloudflare" (Access con código).
+export function guestMode(env) {
+  return String(env.GUEST_MODE || "entra").toLowerCase() === "cloudflare" ? "cloudflare" : "entra";
+}
+
+// Correo real del usuario. En invitados B2B, preferred_username/upn pueden venir
+// como "usuario_gmail.com#EXT#@tenant.onmicrosoft.com": en ese caso se usa el claim "email".
+function emailFromClaims(c) {
+  const candidates = [c.email, c.preferred_username, c.upn, c.unique_name];
+  for (const v of candidates) {
+    const e = normEmail(v);
+    if (e && e.includes("@") && !e.includes("#ext#")) return e;
+  }
+  return "";
 }
 
 export async function startEntraLogin(request, env) {
@@ -95,7 +115,21 @@ export async function finishEntraLogin(request, env) {
     }),
   });
   const tok = await res.json().catch(() => ({}));
-  if (!res.ok || !tok.id_token) return { error: "No se pudo validar el inicio de sesión con Microsoft." };
+  if (!res.ok || !tok.id_token) {
+    const desc = String(tok.error_description || tok.error || `HTTP ${res.status}`);
+    console.error("Entra token error:", res.status, desc);
+    const code = (desc.match(/AADSTS\d+/) || [tok.error || `HTTP ${res.status}`])[0];
+    const hints = {
+      AADSTS7000215: "El secreto de la app es inválido: cargá el 'Value' (no el 'Secret ID') en ENTRA_CLIENT_SECRET.",
+      AADSTS7000222: "El secreto de la app venció: creá uno nuevo en Entra y actualizá ENTRA_CLIENT_SECRET.",
+      AADSTS50011: "La dirección de retorno no está registrada en Entra (plataforma Web).",
+      AADSTS9002327: "La dirección de retorno está registrada como 'Single-page application'; tiene que ser 'Web'.",
+      AADSTS700025: "La app está configurada como cliente público; poné 'Allow public client flows' en No.",
+      AADSTS501481: "Falló la verificación PKCE; volvé a intentar.",
+      AADSTS54005: "El código ya se usó; volvé a intentar.",
+    };
+    return { error: `No se pudo validar el inicio de sesión con Microsoft (${code}). ${hints[code] || ""}`.trim() };
+  }
 
   // El id_token llega directo del endpoint de Microsoft por TLS con nuestro secreto,
   // igualmente validamos emisor, audiencia, inquilino, nonce y vencimiento.
@@ -110,20 +144,32 @@ export async function finishEntraLogin(request, env) {
   if (
     claims.aud !== env.ENTRA_CLIENT_ID ||
     String(claims.tid).toLowerCase() !== tenant ||
-    String(claims.iss).toLowerCase() !== `https://login.microsoftonline.com/${tenant}/v2.0` ||
+    String(claims.iss).toLowerCase() !== `${authority(env).toLowerCase()}/${tenant}/v2.0` ||
     claims.nonce !== tmp.nonce ||
     !(claims.exp > now)
   ) {
     return { error: "El token de Microsoft no es válido para esta aplicación." };
   }
 
-  const email = normEmail(claims.email || claims.preferred_username || claims.upn);
-  if (!isCorporate(env, email)) {
-    return { error: `Solo pueden ingresar cuentas @${env.CORPORATE_DOMAIN}. Ingresaste como ${email || "(sin correo)"}.` };
+  const email = emailFromClaims(claims);
+  let kind = "";
+  if (isCorporate(env, email)) {
+    kind = "emp";
+  } else if (guestMode(env) === "entra" && email && (await isGuest(env, email))) {
+    kind = "guest"; // invitado B2B habilitado en el panel
+  } else if (!email) {
+    return { error: "Microsoft no envió el correo de la cuenta. Un administrador tiene que agregar el claim opcional 'email' en la app de Entra." };
+  } else {
+    return {
+      error:
+        guestMode(env) === "entra"
+          ? `El correo ${email} no está habilitado para ingresar. Pedile acceso a un administrador.`
+          : `Solo pueden ingresar con Microsoft las cuentas @${corporateDomain(env)}. Ingresaste como ${email}.`,
+    };
   }
 
   const headers = new Headers({ Location: tmp.ret || "/" });
-  headers.append("Set-Cookie", await sessionCookie(env, email, "emp"));
+  headers.append("Set-Cookie", await sessionCookie(env, email, kind));
   headers.append("Set-Cookie", cookie(OIDC_COOKIE, "", 0));
   return { response: new Response(null, { status: 302, headers }) };
 }

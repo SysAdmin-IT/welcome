@@ -6,7 +6,7 @@ Sitio de bienvenida privado con panel de administración.
 |---|---|---|
 | Empleados (@diagnosticomaipu.com.ar) | Microsoft Entra ID (SSO) | Sin límite, sin costo |
 | Administradores (solo @diagnosticomaipu.com.ar) | Microsoft Entra ID + figuran en la lista de administradores | — |
-| Correos externos (Gmail, Hotmail…) | Código por correo de **Cloudflare Access** | Máximo 50 (plan gratuito de Zero Trust) |
+| Correos externos (Gmail, Hotmail…) | **Invitación B2B de Microsoft Entra** (`GUEST_MODE=entra`, recomendado) o código de Cloudflare Access (`GUEST_MODE=cloudflare`) | Máximo 50 |
 
 Los empleados **no** pasan por Cloudflare Access, así que no consumen los 50 puestos gratuitos: esos quedan solo para los correos externos.
 
@@ -100,11 +100,33 @@ Entrá a `https://welcome.sistemas-97d.workers.dev` → ingresá con Microsoft �
 
 ---
 
+## Invitados externos con Microsoft Entra (GUEST_MODE = "entra")
+
+Flujo: un administrador habilita el correo en **/admin → Accesos externos → Habilitar e invitar** → el Worker crea la invitación en Entra con Microsoft Graph → el externo recibe un mail de Microsoft, la acepta → ingresa con **Ingresar con Microsoft** usando ese correo (Microsoft le envía un código de verificación). El sitio solo lo deja pasar si el correo sigue en la lista del panel; al darlo de baja pierde el acceso al instante.
+
+Configuración en Entra (una sola vez):
+1. **App registrations → Bienvenida → Token configuration → Add optional claim → ID → email**. (Obligatorio: en los invitados, el nombre de usuario viene con formato `#EXT#` y el correo real llega en este claim.)
+2. **API permissions → Add a permission → Microsoft Graph → Application permissions → `User.Invite.All`** → **Grant admin consent**.
+   Opcional: `User.ReadWrite.All` + `"ENTRA_DELETE_GUESTS": "true"` en wrangler.jsonc para borrar la cuenta invitada de Entra al dar de baja.
+3. **External Identities → External collaboration settings**: permitir que se envíen invitaciones y que el dominio (por ejemplo gmail.com) no esté bloqueado en *Collaboration restrictions*.
+4. **External Identities → All identity providers → Email one-time passcode**: habilitado (es lo que les manda el código a los Gmail).
+5. **Enterprise applications → Bienvenida → Properties → Assignment required = No** (o asignar a los invitados).
+6. Si hay **Acceso condicional** que exige MFA o dispositivo administrado a todos los usuarios, excluí a los invitados o a esta app; si no, los externos no van a poder entrar.
+
+En wrangler.jsonc:
+```jsonc
+"GUEST_MODE": "entra",
+"ENTRA_DELETE_GUESTS": "false",
+```
+En este modo el Worker **welcome-invitados** y Cloudflare Access ya no se usan: podés quitar la protección de Access y borrar ese Worker para liberar los puestos de Zero Trust.
+
+---
+
 ## Uso del panel `/admin`
 
 - **Contenido**: páginas, secciones y botones. Cada botón puede ser *Enlace* (URL), *Archivo* (PDF subido) o *Página* (otra página del sitio). **Guardar y publicar** aplica los cambios.
 - **Archivos**: subir PDFs o imágenes (hasta 20 MB). Solo los ve quien inició sesión. Subí acá la foto de perfil y elegila en *Ajustes generales* para dejar de depender de Linktree.
-- **Accesos externos**: habilitar o dar de baja hasta 50 correos que no son @diagnosticomaipu.com.ar.
+- **Accesos externos**: habilitar (y enviar la invitación de Microsoft), reenviar invitación o dar de baja hasta 50 correos que no son @diagnosticomaipu.com.ar.
 - **Administradores**: agregar o quitar administradores (solo @diagnosticomaipu.com.ar).
 
 Los cambios pueden tardar hasta ~1 minuto en verse en todas las ubicaciones (Workers KV).

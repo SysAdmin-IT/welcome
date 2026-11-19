@@ -30,7 +30,7 @@ function shell(title, inner) {
   return `<!DOCTYPE html><html lang="es"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex">
-<meta name="app-version" content="3.1">
+<meta name="app-version" content="4.0">
 <title>${esc(title)}</title><style>${CSS}</style></head><body><main>${inner}</main></body></html>`;
 }
 
@@ -70,7 +70,7 @@ export function renderPage(content, slug, session, isAdmin, fileIds) {
     .join("");
 
   const back = slug !== "/" ? `<a href="/">‹ Volver</a>` : `<span></span>`;
-  const right = `<span>${isAdmin ? `<a href="/admin">⚙️ Administración</a> · ` : ""}<a href="/logout" title="${esc(session.email)}">Salir</a></span>`;
+  const right = `<span>${isAdmin ? `<a href="/admin">⚙️ Administración</a> · ` : ""}<span title="Sesión iniciada">${esc(session.email)}</span> · <a href="/logout">Salir</a></span>`;
   const av = avatarSrc(content);
   return shell(
     page.title || content.settings.siteTitle,
@@ -86,10 +86,11 @@ export function renderLogin(content, { error = "", returnTo = "/", guestEnabled 
     "Ingresar",
     `${av ? `<img class="avatar" src="${esc(av)}" alt="">` : ""}
      <h1>${esc(content.settings.siteTitle || "Bienvenida")}</h1>
-     <p class="note">Ingresá para ver la información de bienvenida.</p><!-- v3.1 -->
+     <p class="note">Ingresá para ver la información de bienvenida.</p><!-- v4.0 -->
      ${error ? `<div class="error">${esc(error)}</div>` : ""}
      <section>
-       <a class="btn primary" href="/auth/login?return=${encodeURIComponent(returnTo)}">Ingresar con cuenta de Diagnóstico Maipú</a>
+       <a class="btn primary" href="/auth/login?return=${encodeURIComponent(returnTo)}">Ingresar con Microsoft</a>
+       <p class="note">Colaboradores: con su cuenta @diagnosticomaipu.com.ar.<br>Invitados: con el correo que fue habilitado (aceptá antes la invitación de Microsoft).</p>
        ${guestEnabled ? `<a class="btn" href="/auth/invitado">Tengo un acceso de invitado</a>
        <p class="note">Si no tenés cuenta corporativa, un administrador tiene que habilitar tu correo. Vas a recibir un código de verificación de Cloudflare.</p>` : ""}
      </section>`
