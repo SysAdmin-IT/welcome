@@ -313,7 +313,8 @@ function viewGuests() {
   var entra = S.guestMode === "entra";
   var email = h("input", { class: "grow", type: "email", placeholder: "correo@gmail.com" });
   var note = h("input", { class: "grow", placeholder: "Nombre y apellido (aparece en la invitación) — opcional" });
-  var full = S.guests.length >= S.maxGuests;
+  var full = S.maxGuests > 0 && S.guests.length >= S.maxGuests;
+  var maxText = S.maxGuests > 0 ? " Máximo " + S.maxGuests + "." : "";
   var add = h("button", { class: "b p", text: entra ? "Habilitar e invitar" : "Habilitar", disabled: full, on: { click: function () {
     add.disabled = true;
     api("POST", "/guests", { email: email.value, note: note.value }).then(function (d) {
@@ -376,8 +377,8 @@ function viewGuests() {
   } } });
 
   var help = entra
-    ? "Para personas sin cuenta @" + S.domain + ". Al habilitarlas, Microsoft les envía una invitación por correo. Después de aceptarla, ingresan con el botón “Ingresar con Microsoft” usando ese mismo correo (Microsoft les manda un código de verificación). El acceso dura " + S.guestDays + " días y después se borra solo. Máximo " + S.maxGuests + "."
-    : "Para personas sin cuenta @" + S.domain + ". Al ingresar, Cloudflare les envía un código por correo. El acceso dura " + S.guestDays + " días y después se borra solo. Máximo " + S.maxGuests + ".";
+    ? "Para personas sin cuenta @" + S.domain + ". Al habilitarlas, Microsoft les envía una invitación por correo. Después de aceptarla, ingresan con el botón “Ingresar con Microsoft” usando ese mismo correo (Microsoft les manda un código de verificación). El acceso dura " + S.guestDays + " días y después se borra solo." + maxText
+    : "Para personas sin cuenta @" + S.domain + ". Al ingresar, Cloudflare les envía un código por correo. El acceso dura " + S.guestDays + " días y después se borra solo." + maxText;
 
   var head = [h("th", { text: "Correo" })];
   if (entra) head.push(h("th", { text: "Estado" }));
@@ -394,7 +395,7 @@ function viewGuests() {
       full ? h("div", { class: "warn", text: "Se alcanzó el máximo de " + S.maxGuests + ". Dá de baja algún correo para agregar otro." }) : null
     ),
     h("div", { class: "card" },
-      h("div", { class: "row" }, h("h2", { class: "grow", style: "margin:0", text: "Correos habilitados " }), h("span", { class: "pill", text: S.guests.length + " / " + S.maxGuests }),
+      h("div", { class: "row" }, h("h2", { class: "grow", style: "margin:0", text: "Correos habilitados " }), h("span", { class: "pill", text: S.maxGuests > 0 ? S.guests.length + " / " + S.maxGuests : String(S.guests.length) }),
         !entra && S.accessConfigured ? h("button", { class: "b", text: "↻ Resincronizar con Cloudflare", on: { click: function () {
           api("POST", "/guests/sync").then(function (d) { toast(d.sync.message, !d.sync.ok); }).catch(function (e) { toast(e.message, true); });
         } } }) : null),

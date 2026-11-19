@@ -6,7 +6,7 @@ Sitio de bienvenida privado con panel de administración.
 |---|---|---|
 | Empleados (@diagnosticomaipu.com.ar) | Microsoft Entra ID (SSO) | Sin límite, sin costo |
 | Administradores (solo @diagnosticomaipu.com.ar) | Microsoft Entra ID + figuran en la lista de administradores | — |
-| Correos externos (Gmail, Hotmail…) | **Invitación B2B de Microsoft Entra** (`GUEST_MODE=entra`, recomendado) o código de Cloudflare Access (`GUEST_MODE=cloudflare`) | Máximo 50 |
+| Correos externos (Gmail, Hotmail…) | **Invitación B2B de Microsoft Entra** (`GUEST_MODE=entra`, recomendado) o código de Cloudflare Access (`GUEST_MODE=cloudflare`) | Entra: sin límite (opcional `MAX_GUESTS`). Cloudflare: máximo 50 |
 
 Los empleados **no** pasan por Cloudflare Access, así que no consumen los 50 puestos gratuitos: esos quedan solo para los correos externos.
 

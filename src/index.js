@@ -6,7 +6,7 @@ import {
   getGuests, saveGuests, purgeExpiredGuests, newExpiry, guestExpiresAt, guestDays,
   listFiles, getFile, putFile, deleteFile,
   normEmail, isEmail, isCorporate, corporateDomain,
-  MAX_GUESTS, MAX_FILE_BYTES,
+  maxGuests, MAX_FILE_BYTES,
 } from "./store.js";
 import { getSession, startEntraLogin, finishEntraLogin, finishGuestLogin, logoutCookie, guestMode } from "./auth.js";
 import { inviteGuest, removeGuestFromEntra } from "./graph.js";
@@ -17,7 +17,7 @@ import { adminHtml } from "./admin.js";
 const json = (data, status = 200) =>
   new Response(JSON.stringify(data), { status, headers: { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" } });
 
-const APP_VERSION = "4.1";
+const APP_VERSION = "4.2";
 
 const SECURITY_HEADERS = {
   "X-App-Version": APP_VERSION,
@@ -187,7 +187,7 @@ async function adminApi(request, env, url, path, session, ctx) {
       admins,
       fixedAdmins: bootstrapAdmins(env),
       guests,
-      maxGuests: MAX_GUESTS,
+      maxGuests: maxGuests(env),
       guestDays: guestDays(env),
       maxFileMB: MAX_FILE_BYTES / 1024 / 1024,
       files,
@@ -235,7 +235,8 @@ async function adminApi(request, env, url, path, session, ctx) {
     await cleanupExpiredGuests(env);
     const list = await getGuests(env);
     if (list.some((g) => g.email === e)) return json({ error: "Ese correo ya está registrado" }, 400);
-    if (list.length >= MAX_GUESTS) return json({ error: `Se alcanzó el máximo de ${MAX_GUESTS} correos externos. Dá de baja alguno primero.` }, 400);
+    const max = maxGuests(env);
+    if (max && list.length >= max) return json({ error: `Se alcanzó el máximo de ${max} correos externos. Dá de baja alguno primero.` }, 400);
     const rec = { email: e, note: String(note || "").slice(0, 120), addedBy: session.email, addedAt: new Date().toISOString(), expiresAt: newExpiry(env) };
     let sync;
     if (guestMode(env) === "entra") {

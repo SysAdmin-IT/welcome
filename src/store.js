@@ -1,7 +1,13 @@
 // Acceso a los datos guardados en Workers KV (binding DATA).
 import { seedContent } from "./seed.js";
 
-export const MAX_GUESTS = 50;
+// Límite de invitados: solo en modo "cloudflare" (50 puestos gratuitos de Zero Trust).
+// En modo "entra" no hay límite (0 = sin límite), salvo que se defina MAX_GUESTS.
+export function maxGuests(env) {
+  if (String(env.GUEST_MODE || "entra").toLowerCase() === "cloudflare") return 50;
+  const n = Number(env.MAX_GUESTS);
+  return Number.isFinite(n) && n > 0 ? Math.floor(n) : 0;
+}
 export const MAX_FILE_BYTES = 20 * 1024 * 1024; // 20 MB (KV admite hasta 25 MB por valor)
 
 export const normEmail = (e) => String(e || "").trim().toLowerCase();
