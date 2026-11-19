@@ -32,4 +32,6 @@
   }
   // Secretos (NO van en este archivo; se cargan en Settings > Variables and Secrets):
   //   ENTRA_CLIENT_SECRET, SESSION_SECRET, GUEST_LINK_SECRET, CF_API_TOKEN
+"GUEST_MODE": "entra",
+"ENTRA_DELETE_GUESTS": "false",
 }
