@@ -8,7 +8,7 @@
   "observability": { "enabled": true },
   "vars": {
     // Dirección del sitio principal (sin barra final)
-    "MAIN_URL": "https://welcome.sistemas-97d.workers.dev"
+    "MAIN_URL": "https://bienvenida.diagnosticomaipu.com.ar"
     // Solo si protegés el Worker con el método clásico (workers.dev > Enable Cloudflare Access),
     // agregá también:
     //   "TEAM_DOMAIN": "https://TU-EQUIPO.cloudflareaccess.com",
