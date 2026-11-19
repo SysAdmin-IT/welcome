@@ -25,7 +25,7 @@
     // Dirección del Worker de invitados (vacío = botón de invitado oculto)
     "GUEST_GATEWAY_URL": "https://welcome-invitados.sistemas-97d.workers.dev",
     // Cloudflare Access (para sincronizar la lista de correos externos)
-    "CF_ACCOUNT_ID": "PEGAR-ACCOUNT-ID",
+    "CF_ACCOUNT_ID": "97d9909480820eb104ce3e2bb491b749",
     "CF_ACCESS_POLICY_ID": "PEGAR-ID-DE-LA-POLITICA",
     // Solo si la política es "De la app" (no reutilizable)
     "CF_ACCESS_APP_ID": ""
